@@ -1,0 +1,22 @@
+{
+  "model": {
+    "max_seq_len": 1024,
+    "n_layer": 12,
+    "n_head": 12,
+    "n_kv_head": 4,
+    "d_model": 768
+  },
+  "train": {
+    "data": "data/web:0.7,data/code:0.3",
+    "out_dir": "runs/small",
+    "batch_size": 16,
+    "total_batch_tokens": 524288,
+    "max_steps": 6000,
+    "lr": 6e-4,
+    "warmup_steps": 700,
+    "eval_interval": 250,
+    "save_interval": 1000,
+    "sample_prompt": "def fibonacci(n):",
+    "compile": true
+  }
+}

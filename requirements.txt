@@ -1,0 +1,5 @@
+torch>=2.4
+numpy>=1.26
+tiktoken>=0.7
+datasets>=2.19
+pytest>=8
