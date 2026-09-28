@@ -1,0 +1,21 @@
+{
+  "model": {
+    "max_seq_len": 1024,
+    "n_layer": 6,
+    "n_head": 8,
+    "n_kv_head": 4,
+    "d_model": 512
+  },
+  "train": {
+    "data": "data/web:0.7,data/code:0.3",
+    "out_dir": "runs/colab",
+    "batch_size": 4,
+    "total_batch_tokens": 65536,
+    "max_steps": 2000,
+    "lr": 1e-3,
+    "warmup_steps": 200,
+    "eval_interval": 200,
+    "save_interval": 200,
+    "sample_prompt": "def fibonacci(n):"
+  }
+}

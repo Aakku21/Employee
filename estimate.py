@@ -21,6 +21,7 @@ GPUS = {
     "H100": (989e12, 2.50),
     "A100": (312e12, 1.50),
     "RTX 4090": (165e12, 0.40),
+    "T4": (65e12, 0.0),  # free on Google Colab (fp16), with session time limits
 }
 LLAMA_31_405B_FLOPS = 3.8e25  # reported by Meta in the Llama 3 paper
 

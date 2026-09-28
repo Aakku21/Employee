@@ -25,6 +25,7 @@ flash attention, bf16 mixed precision, and multi-GPU training.
 | Config | Size | Training tokens | Time on 8×H100* | Compute cost* | What to expect |
 |---|---|---|---|---|---|
 | `tiny_cpu` | 13.6M | 0.6M | ~8 min on a laptop CPU | $0 | Proves the pipeline works. Output is mostly gibberish. |
+| `colab_t4` | 69M | 131M | ~1–1.5 hours on 1 free Colab T4 | $0 | Learns word and code shapes. Rarely correct. Good for learning. |
 | `small` | 153M | 3.1B | ~20–40 min | ~$6–20 | Roughly GPT-2-small (2019) quality: fluent-looking text, simple code patterns, often wrong. |
 | `medium` | 369M | 7.3B | ~2–4 hours | ~$30–100 | Noticeably better, but still weak at real coding tasks. |
 
@@ -36,6 +37,41 @@ cost is higher: budget 2–3× for failed runs, experiments and data prep.
 ```bash
 pip install -r requirements.txt
 pytest                      # 19 tests, ~10 seconds on CPU
+```
+
+## Quickest path: train for free on Google Colab
+
+No GPU of your own? Google Colab gives you a free T4 GPU for a few hours per session.
+
+1. Open https://colab.research.google.com, create a new notebook, and pick
+   **Runtime → Change runtime type → T4 GPU**.
+2. Paste each block below into its own cell and run them in order.
+
+```python
+# 1. Get the code (private repo? use https://<your-github-token>@github.com/...)
+!git clone -b claude/beautiful-mendel-w30nmm https://github.com/Aakku21/Employee.git
+%cd Employee
+!pip install -q tiktoken datasets          # PyTorch is already installed on Colab
+
+# 2. Save checkpoints to Google Drive, so a disconnect doesn't lose your training
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+```python
+# 3. Download and prepare data (~20-40 minutes)
+!python prepare_data.py --source web  --max-tokens 100e6 --out data/web
+!python prepare_data.py --source code --max-tokens 50e6  --out data/code
+```
+
+```python
+# 4. Train (~1-1.5 hours). If Colab disconnects: re-run cells 1-3, then this cell. It resumes.
+!python train.py configs/colab_t4.json --train.out_dir=/content/drive/MyDrive/llm/colab
+```
+
+```python
+# 5. Use it
+!python sample.py /content/drive/MyDrive/llm/colab --prompt "def is_prime(n):" --num-samples 3
 ```
 
 ## Step 1: get data from the internet
@@ -103,16 +139,60 @@ python train.py configs/small.json --train.lr=3e-4 --model.n_layer=8       # cha
   On a 24 GB card (RTX 4090) use `--train.batch_size=4` for `small`.
 - **Mixing data:** `"data": "data/web:0.7,data/code:0.3"` samples 70% web, 30% code.
   Change the mix without re-tokenizing.
-- **What to watch:** validation loss is reported per source (`web`, `code`). If
-  training loss keeps falling but validation loss rises, the model is memorizing:
-  get more data.
+- **What to watch:** loss is the model's error score; lower is better.
+  - It starts near 11.5 (a pure guess) and should drop fast in the first few hundred
+    steps, then keep falling slowly.
+  - Loss goes up, or becomes `nan`: the learning rate is too high. Lower `--train.lr`.
+  - Training loss keeps falling but validation loss rises: the model is memorizing.
+    Get more data.
+  - Validation loss is shown per source (`web`, `code`), so you can see which one is weak.
 - Logs go to `runs/<name>/log.jsonl`.
 
-## Step 4: generate
+## Step 4: use the model
+
+**From the command line:**
 
 ```bash
 python sample.py runs/small --prompt "def quicksort(arr):" --num-samples 3
+python sample.py runs/small --prompt "The history of Rome" --temperature 0.9 --max-new-tokens 300
 ```
+
+| Setting | What it does |
+|---|---|
+| `--temperature` | Randomness. `0` = always the most likely word (repeats itself), `0.7–0.9` = balanced, `>1` = wild. |
+| `--top-k`, `--top-p` | Only pick from the most likely next tokens. Cuts nonsense. |
+| `--max-new-tokens` | How much text to write. |
+| `--num-samples` | Several different answers to the same prompt. |
+
+**From your own Python code:**
+
+```python
+import torch
+from sample import load_model
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model, tok, step = load_model("runs/small", device)
+
+prompt = 'def is_prime(n):\n    """Return True if n is a prime number."""\n'
+ids = torch.tensor([[tok.eot] + tok.encode(prompt)], device=device)
+out = model.generate(ids, max_new_tokens=100, temperature=0.8, top_k=50, stop_token=tok.eot)
+
+new = out[0, ids.shape[1]:].tolist()
+if tok.eot in new:
+    new = new[: new.index(tok.eot)]  # stop at "end of document"
+print(prompt + tok.decode(new))
+```
+
+**How to write prompts for this model.** It has only learned to *continue documents*.
+It has not learned to answer questions. So write the start of the document you want:
+
+| Works | Doesn't work |
+|---|---|
+| `def is_prime(n):\n    """Return True if n is prime."""` | `Write a function that checks if a number is prime` |
+| `import pandas as pd\n\ndf = pd.read_csv(` | `How do I read a CSV file?` |
+| `Photosynthesis is the process by which` | `Explain photosynthesis to me` |
+
+Making it answer questions needs instruction tuning (see below).
 
 ## What the test run on this repo showed
 
@@ -149,7 +229,7 @@ prepare_data.py     download, filter, tokenize → data/<name>/{train,val}.bin +
 train.py            training loop (CPU, 1 GPU, or many GPUs with torchrun)
 sample.py           generate text from a checkpoint
 estimate.py         compute and cost estimate for a config
-configs/            tiny_cpu (test), small (153M), medium (369M)
+configs/            tiny_cpu (test), colab_t4 (69M, free GPU), small (153M), medium (369M)
 llm/model.py        the transformer
 llm/data.py         batch loader with weighted data mixing
 llm/quality.py      document filters, dedup, train/val split

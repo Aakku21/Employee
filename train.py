@@ -42,7 +42,8 @@ def pick_dtype(name: str, device: str) -> str:
     if name != "auto":
         return name
     if device.startswith("cuda"):
-        return "bfloat16" if torch.cuda.is_bf16_supported() else "float16"
+        # Older GPUs (e.g. the T4 on free Colab) only emulate bf16, which is slow: use float16 there.
+        return "bfloat16" if torch.cuda.is_bf16_supported(including_emulation=False) else "float16"
     return "float32"
 
 
