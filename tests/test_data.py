@@ -105,3 +105,26 @@ def test_prepare_local_folder(tmp_path):
 
     with pytest.raises(SystemExit):  # refuses to overwrite by accident
         prepare(["--source", "local", "--path", str(src), "--out", str(out)])
+
+
+def test_inspect_data_shows_real_documents(tmp_path, capsys):
+    from inspect_data import document_lengths, main as inspect_main
+    from llm.tokenizer import Tokenizer
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("def add(a, b):\n    return a + b\n\n" * 20)
+    (src / "b.md").write_text("Photosynthesis turns light into chemical energy. " * 20)
+    out = tmp_path / "out"
+    prepare(["--source", "local", "--path", str(src), "--out", str(out), "--val-permille", "0"])
+
+    inspect_main([str(out), "--samples", "2", "--chars", "40"])
+    printed = capsys.readouterr().out
+    assert "2 kept out of 2" in printed
+    assert "def add(a, b):" in printed and "Photosynthesis" in printed
+
+    tok = Tokenizer()
+    tokens = np.fromfile(out / "train.bin", dtype="uint32")
+    lengths = document_lengths(tokens, tok.eot)
+    assert len(lengths) == 2 and lengths.sum() == len(tokens) - 2
+    assert (document_lengths(tokens, tok.eot, max_docs=1) == lengths[:1]).all()

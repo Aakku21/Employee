@@ -36,7 +36,7 @@ cost is higher: budget 2–3× for failed runs, experiments and data prep.
 
 ```bash
 pip install -r requirements.txt
-pytest                      # 19 tests, ~10 seconds on CPU
+pytest                      # 20 tests, ~10 seconds on CPU
 ```
 
 ## Quickest path: train for free on Google Colab
@@ -112,6 +112,18 @@ Things to know:
   duplicates (see `llm/quality.py`).
 - Train/validation split is decided by each document's content hash, so the same
   document never lands in both.
+
+### Look inside your data before training
+
+The model learns whatever is in the data, including mistakes, spam and old code.
+Always read some of it:
+
+```bash
+python inspect_data.py data/web data/code --samples 5
+```
+
+This shows where the data came from, how many documents were kept or dropped (and why),
+document lengths, and random real documents.
 
 ## Step 2: estimate the cost before you pay
 
@@ -229,6 +241,7 @@ prepare_data.py     download, filter, tokenize → data/<name>/{train,val}.bin +
 train.py            training loop (CPU, 1 GPU, or many GPUs with torchrun)
 sample.py           generate text from a checkpoint
 estimate.py         compute and cost estimate for a config
+inspect_data.py     show stats and random real documents from prepared data
 configs/            tiny_cpu (test), colab_t4 (69M, free GPU), small (153M), medium (369M)
 llm/model.py        the transformer
 llm/data.py         batch loader with weighted data mixing
